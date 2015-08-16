@@ -279,6 +279,7 @@ var createLocalEngine=function(kdb,opts,cb,context) {
 		//engine.customfunc=customfunc.getAPI(res[0].config);
 		engine.ready=true;
 		method.hotfix_segoffset_before20150710(engine);
+		method.buildSegnameIndex(engine);
 	}
 	var preload=method.getPreloadField(opts.preload);
 	var opts={recursive:true};
@@ -470,7 +471,7 @@ module.exports=API;
 var pool={};
 var strsep="\uffff";
 var method=require("./method");
-
+var verbose=false;
 
 var getRemote=function(path,opts,cb) {
 
@@ -553,11 +554,14 @@ var createRemoteEngine=function(kdb,opts,cb,context) {
 		//engine.customfunc=customfunc.getAPI(res[0].config);
 		engine.ready=true;
 		method.hotfix_segoffset_before20150710(engine);
+		method.buildSegnameIndex(engine);
 	}
 	var preload=method.getPreloadField(opts.preload);
 	var opts={recursive:true};
+	if (verbose) console.time("preload Remote");
 	method.gets.apply(engine,[ preload, opts,function(res){
 		setPreload(res);
+		if (verbose) console.timeEnd("preload Remote");
 		cb.apply(engine.context,[engine]);
 	}]);
 	return engine;
@@ -575,7 +579,7 @@ var openRemote=function(kdbid,opts,cb,context) {
 		if (cb) cb.apply(context||engine.context,[0,engine]);
 		return engine;
 	}
-	console.log("open remote",kdbid);
+	if (verbose) console.log("open remote",kdbid);
 
 	createRemoteEngine(kdbid,opts,function(engine){
 		pool[kdbid]=engine;
@@ -888,8 +892,11 @@ var getFileSegNames=function(i) {
 
 var getPreloadField=function(user) {
 	var preload=[["meta"],["filenames"],["fileoffsets"],["segnames"],
-	["segoffsets"],["filesegcount"],["txtid"],["txtid_idx"],["txtid_invert"]];
+	["segoffsets"],["filesegcount"]];
+
+	//,["txtid"],["txtid_idx"],["txtid_invert"]];
 	//["tokens"],["postingslen"] kse will load it
+
 	if (user && user.length) { //user supply preload
 		for (var i=0;i<user.length;i++) {
 			if (preload.indexOf(user[i])==-1) {
@@ -1028,40 +1035,44 @@ var prevSeg=function(segid) {
 		return segnames[i-1];
 	} else return segid;
 }
-var txtid2fileSeg=function(txtid) {
-	var txtid_idx=this.get("txtid_idx");
-	var start=bsearch(this.get("txtid"),txtid);
-	if (start<0) return 0;
-	var absseg=txtid_idx[start];
-	return absSegToFileSeg.call(this,absseg);
+//return file seg of first txtid
+
+var txt2absseg=function(txtid) {
+	var absseg=this.txtid[txtid];
+	if (!absseg) return null;
+	if (typeof absseg[0]==="number") absseg=absseg[0];
+	return absseg;
 }
+var txtid2fileSeg=function(txtid) {
+	var absseg=txt2absseg.call(this,txtid);
+	if (!absseg) return;
+	return absSegToFileSeg.call(this,absseg-1);
+}
+
 var vpos2txtid=function(vpos){
 	var absseg=this.absSegFromVpos(vpos);
-	var s=this.get("txtid_invert")[absseg];
-	return this.get("txtid")[s];
+	var segnames=this.get("segnames");
+	return segnames[absseg];
 }
+
 var nextTxtid=function(txtid) {
-	var txtid_idx=this.get("txtid_idx");
-	var start=bsearch(this.get("txtid"),txtid);
-	if (start===-1 || start===txtid_idx.length-1) return null;
-	var absseg=txtid_idx[start];
-	var newvpos=absSegToVpos.call(this,absseg);
-	return vpos2txtid.call(this,newvpos);
+	var absseg=txt2absseg.call(this,txtid);
+	if (!absseg) return;
+	var segnames=this.get("segnames");
+	return segnames[absseg];
 }
 var prevTxtid=function(txtid) {
-	var txtid_idx=this.get("txtid_idx");
-	var start=bsearch(this.get("txtid"),txtid);
-	if (start===-1 || txtid_idx[start]<2) return null;
-	var absseg=txtid_idx[start]-2;
-	var newvpos=absSegToVpos.call(this,absseg);
-	return vpos2txtid.call(this,newvpos);
+	var absseg=txt2absseg.call(this,txtid);
+	if (!absseg) return;
+	var segnames=this.get("segnames");
+	return segnames[absseg-2];
 }
 var txtid2vpos=function(txtid) {
-	var txtid_idx=this.get("txtid_idx");
-	var start=bsearch(this.get("txtid"),txtid);
-	if (start<0) return 0;
-	var absseg=txtid_idx[start];
-	return this.absSegToVpos(absseg-1);
+	var absseg=txt2absseg.call(this,txtid);
+	if (!absseg) return;
+	var segoffsets=this.get("segoffsets");
+	return segoffsets[absseg-1];
+
 }
 var setup=function(engine) {
 	engine.get=localengine_get;
@@ -1098,7 +1109,19 @@ var hotfix_segoffset_before20150710=function(engine) {
 		console.log("old segoffsets, better rebuild your kdb")
 	}
 }
-module.exports={setup:setup,getPreloadField:getPreloadField,gets:gets,hotfix_segoffset_before20150710:hotfix_segoffset_before20150710};
+var buildSegnameIndex=function(engine){
+	/* replace txtid,txtid_idx, txtid_invert , save 400ms load time */
+	var segnames=engine.get("segnames");
+	var segindex={};
+	for (var i=1;i<=segnames.length;i++) {
+		var segname=segnames[i-1];
+		segindex[segname]=i; //assuming unique segname
+	}
+	engine.txtid=segindex;
+}
+module.exports={setup:setup,getPreloadField:getPreloadField,gets:gets
+	,hotfix_segoffset_before20150710:hotfix_segoffset_before20150710
+	,buildSegnameIndex:buildSegnameIndex};
 },{"./bsearch":3}],8:[function(require,module,exports){
 var getPlatform=function() {
 	if (typeof ksanagap=="undefined") {
@@ -4388,6 +4411,12 @@ var api={
 }
 module.exports=api;
 },{"./bsearch":17,"./excerpt":18,"./fetchtext":19,"./search":21,"ksana-analyzer":"ksana-analyzer","ksana-database":"ksana-database"}],"ksana-simple-api":[function(require,module,exports){
+/*
+	TODO : fetch tags
+	render tags
+
+*/
+
 var kse=require("ksana-search");
 var plist=require("ksana-search/plist");
 var kde=require("ksana-database");
@@ -4488,6 +4517,7 @@ var fetch=function(opts,cb,context) {
 					uti.push(res.engine.vpos2txtid(vpos[i]));
 				}
 			}
+			if (typeof uti!=="object") uti=[uti];
 			var keys=txtids2key.call(res.engine,uti);
 			if (typeof keys[0][1]=="undefined") {
 				cb("uti not found: "+uti+" in "+opts.db);
@@ -4552,10 +4582,10 @@ var scan=function(opts,cb,context) {
 		}
 		var db=res.engine;
 		var out=[];
-		var txtid=db.get("txtid");
+		var segnames=db.get("segnames");
 		for (var i=0;i<opts.sentence.length;i++) {
 			var q=opts.sentence.substr(i);
-			out=out.concat(beginWith(q,txtid));
+			out=out.concat(beginWith(q,segnames));
 		}
 		cb(0,out);
 	});
@@ -4604,21 +4634,20 @@ var groupByField=function(db,rawresult,field,regex,filterfunc,cb) {
 var groupByTxtid=function(db,rawresult,regex,filterfunc,cb) {
 	if (!rawresult||!rawresult.length) {
 		//no q , filter all field
-			var values=db.get("txtid");
+			var values=db.get("segnames");
 			var matches=filterField(values,regex,filterfunc);
 			cb(0,matches);
 	} else {
 		var segoffsets=db.get("segoffsets");
     var seghits= plist.groupbyposting2(rawresult, segoffsets); 
-    var txtid_invert=db.get("txtid_invert");
-    var txtid=db.get("txtid");
+    var txtid=db.get("segnames");
     var matches=[],hits=[];
     var reg=new RegExp(regex);
 		 filterfunc=filterfunc|| reg.test.bind(reg);
     for (var i=0;i<seghits.length;i++) {
       var seghit=seghits[i];
       if (!seghit || !seghit.length) continue;
-      var item=txtid[txtid_invert[i]-1];
+      var item=txtid[i-1];
 		  if (filterfunc(item,regex)) {
       	matches.push(item);
       	hits.push(seghit);

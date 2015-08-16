@@ -31,8 +31,7 @@ var maincomponent = React.createClass({
     this.fetchText(e.target.innerHTML);
   }
   ,renderText:function() {
-    var func=E.bind(null,"span");
-    return ksa.renderHits(this.state.text,this.state.hits,func);
+    return ksa.renderHits(this.state.text,this.state.hits,E.bind(null,"span"));
   }
   ,render: function() {
     return <div style={styles.container}>
