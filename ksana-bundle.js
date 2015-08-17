@@ -4757,7 +4757,8 @@ var fillHits=function(searchable,tofind,cb) {
 	taskqueue.shift()(0,{__empty:true});
 }
 var tryOpen=function(kdbid,cb){
-	if (window.location.protocol==="file:" && typeof process==="undefined") {
+	if ((window.location.protocol==="file:" && typeof process==="undefined") 
+	|| typeof io==="undefined" ) {
 		cb("local file mode");
 		return;
 	}
