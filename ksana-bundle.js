@@ -377,6 +377,22 @@ var openLocalNode=function(kdbid,opts,cb,context) {
 	if (cb) cb.apply(context,[kdbid+" not found"]);
 	return null;
 }
+var openLocalFile=function(file,opts,cb,context) {	
+    var kdbid=file.name.substr(0,file.name.length-4);
+
+		var engine=localPool[kdbid];
+		if (engine) {
+			cb(0,engine);
+			return;
+		}
+
+		new Kdb.open(file,function(err,handle){
+			createLocalEngine(handle,opts,function(engine){
+				localPool[kdbid]=engine;
+				cb.apply(context||engine.context,[0,engine]);
+			},context);
+		});
+}
 
 var openLocalHtml5=function(kdbid,opts,cb,context) {	
 	var engine=localPool[kdbid];
@@ -398,17 +414,20 @@ var openLocalHtml5=function(kdbid,opts,cb,context) {
 }
 
 var kde_remote=require("./kde_remote");
-
 //omit cb for syncronize open
 var open=function(kdbid,opts,cb,context)  {
-	if (kdbid.indexOf("http")==0) {
-		return kde_remote(kdbid,opts,cb,context);
-	}
-
 	if (typeof opts=="function") { //no opts
 		if (typeof cb=="object") context=cb;
 		cb=opts;
 		opts={};
+	}
+
+	if (typeof File!=="undefined" && kdbid.constructor===File) {
+		return openLocalFile(kdbid,opts,cb,context);
+	}
+
+	if (kdbid.indexOf("http")==0) {
+		return kde_remote(kdbid,opts,cb,context);
 	}
 	
 	var engine=localPool[kdbid];
@@ -1216,6 +1235,14 @@ module.exports=API;
 
 /* emulate filesystem on html5 browser */
 /* emulate filesystem on html5 browser */
+
+var getFileSize=function(fn,cb) {
+	var reader = new FileReader();
+	reader.onload = function(){
+		cb(reader.result.length);
+	};
+	reader.readAsDataURL(fn);
+}
 var read=function(handle,buffer,offset,length,position,cb) {//buffer and offset is not used
 	var xhr = new XMLHttpRequest();
 	xhr.open('GET', handle.url , true);
@@ -1237,6 +1264,13 @@ var fstatSync=function(handle) {
 var fstat=function(handle,cb) {
 	throw "not implement yet";
 }
+var _openLocal=function(file,cb) {
+	var handle={};
+	handle.url=URL.createObjectURL(file);
+	handle.fn=file.name.substr(file.name.indexOf("#")+1);
+	handle.file=file;
+	cb(handle);
+}
 var _open=function(fn_url,cb) {
 		var handle={};
 		if (fn_url.indexOf("filesystem:")==0){
@@ -1251,9 +1285,14 @@ var _open=function(fn_url,cb) {
 		cb(handle);
 }
 var open=function(fn_url,cb) {
-		if (!API.initialized) {init(1024*1024,function(){
-			_open.apply(this,[fn_url,cb]);
-		},this)} else _open.apply(this,[fn_url,cb]);
+	if (typeof File !=="undefined" && fn_url.constructor ===File) {
+		_openLocal.call(this,fn_url,cb);
+		return;
+	}
+
+	if (!API.initialized) {init(1024*1024,function(){
+		_open.apply(this,[fn_url,cb]);
+	},this)} else _open.apply(this,[fn_url,cb]);
 }
 var load=function(filename,mode,cb) {
 	open(filename,mode,cb,true);
@@ -1295,6 +1334,8 @@ var init=function(quota,cb,context) {
 		}, errorHandler 
 	);
 }
+
+
 var API={
 	read:read
 	,readdir:readdir
@@ -1302,6 +1343,7 @@ var API={
 	,close:close
 	,fstatSync:fstatSync
 	,fstat:fstat
+	,getFileSize:getFileSize
 }
 module.exports=API;
 },{}],12:[function(require,module,exports){
@@ -2097,13 +2139,22 @@ var Open=function(path,opts,cb) {
 
 		if (html5fs) {
 			var fn=path;
-			if (path.indexOf("filesystem:")==0) fn=path.substr(path.lastIndexOf("/"));
-			fs.fs.root.getFile(fn,{},function(entry){
-			  entry.getMetadata(function(metadata) { 
-				that.size=metadata.size;
-				if (cb) setTimeout(cb.bind(that),0);
-				});
-			});
+			if (this.handle.file) {
+				//local file
+				fs.getFileSize(this.handle.file,function(size){
+					that.size=size;
+					if (cb) setTimeout(cb.bind(that),0);
+				})
+			} else if (fs&& fs.fs && fs.fs.root) {
+				if (path.indexOf("filesystem:")==0) fn=path.substr(path.lastIndexOf("/"));
+				//Google File system
+				fs.fs.root.getFile(fn,{},function(entry){
+				  entry.getMetadata(function(metadata) { 
+					that.size=metadata.size;
+					if (cb) setTimeout(cb.bind(that),0);
+					});
+				});				
+			}
 		} else {
 			var stat=fs.fstatSync(this.handle);
 			this.stat=stat;
@@ -4304,7 +4355,8 @@ var prepareEngineForSearch=function(engine,cb){
 }
 
 var openEngine=function(dbid_or_engine,cb,context) {
-	if (typeof dbid_or_engine=="string") {//browser only
+	var localfile=(typeof File!=="undefined" && dbid_or_engine.constructor==File);
+	if (typeof dbid_or_engine=="string" || localfile) {//browser only
 		var kde=require("ksana-database");
 
 		kde.open(dbid_or_engine,function(err,engine){
@@ -4704,7 +4756,15 @@ var fillHits=function(searchable,tofind,cb) {
 	});
 	taskqueue.shift()(0,{__empty:true});
 }
-
+var tryOpen=function(kdbid,cb){
+	if (window.location.protocol==="file:" && typeof process==="undefined") {
+		cb("local file mode");
+		return;
+	}
+	kde.open(kdbid,function(err){
+		cb(err);
+	});
+}
 var renderHits=function(text,hits,func){
   var ex=0,out=[];
   hits=hits||[];
@@ -4732,7 +4792,8 @@ var API={
 	filter:filter,
 	listkdb:listkdb,
 	fillHits:fillHits,
-	renderHits:renderHits
+	renderHits:renderHits,
+	tryOpen:tryOpen
 }
 module.exports=API;
 },{"ksana-database":"ksana-database","ksana-search":"ksana-search","ksana-search/plist":20}]},{},[]);
