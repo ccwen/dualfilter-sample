@@ -16,7 +16,5 @@
     "url": "https://github.com/ksanaforge/dualfilter-sample.git"
   },
   "dependencies": {
-    "react": "^0.13.3",
-    "react-list": "^0.6.0"
   }
 }
