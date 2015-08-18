@@ -2,6 +2,8 @@ var React=require("react");
 var E=React.createElement;
 var ksa=require("ksana-simple-api");
 var DualFilter=require("ksana2015-dualfilter").Component;
+var HTMLFileOpener=require("ksana2015-htmlfileopener").Component;
+
 var db="moedict";
 var styles={
   container:{display:"flex"}
@@ -41,20 +43,15 @@ var maincomponent = React.createClass({
   ,renderText:function() {
     return ksa.renderHits(this.state.text,this.state.hits,E.bind(null,"span"));
   }
-  ,openLocalFile:function(e) {
-    var file=e.target.files[0];
-    if (!file)return;
-    if (file.name.indexOf("moedict.kdb")>-1) {
-      this.setState({localmode:false,ready:true});
-      db=file;
-    }
+  ,onFileReady:function(files) {
+    this.setState({localmode:false,ready:true});
+    db=files[db];//replace dbid with HTML File handle
   }
   ,renderOpenKDB:function() {
     if (!this.state.localmode)return <div>Loading {db}</div>;
     return <div>
       <h2>Dual Filter DEMO for Moedict</h2>
-      Click and select moedict.kdb <input type="file" accept=".kdb" onChange={this.openLocalFile}></input>
-      <a href="http://ya.ksana.tw/kdb/moedict.kdb">Download Moedict.kdb</a> if you don't have it on local disk.
+      <HTMLFileOpener onReady={this.onFileReady}/>
       <br/>Google Chrome Only
       <br/><a target="_new" href="https://github.com/ksanaforge/dualfilter-sample">Github Repo</a>
     </div>

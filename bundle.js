@@ -11,6 +11,8 @@ var React=require("react");
 var E=React.createElement;
 var ksa=require("ksana-simple-api");
 var DualFilter=require("ksana2015-dualfilter").Component;
+var HTMLFileOpener=require("ksana2015-htmlfileopener").Component;
+
 var db="moedict";
 var styles={
   container:{display:"flex"}
@@ -50,20 +52,15 @@ var maincomponent = React.createClass({displayName: "maincomponent",
   ,renderText:function() {
     return ksa.renderHits(this.state.text,this.state.hits,E.bind(null,"span"));
   }
-  ,openLocalFile:function(e) {
-    var file=e.target.files[0];
-    if (!file)return;
-    if (file.name.indexOf("moedict.kdb")>-1) {
-      this.setState({localmode:false,ready:true});
-      db=file;
-    }
+  ,onFileReady:function(files) {
+    this.setState({localmode:false,ready:true});
+    db=files[db];//replace dbid with HTML File handle
   }
   ,renderOpenKDB:function() {
     if (!this.state.localmode)return React.createElement("div", null, "Loading ", db);
     return React.createElement("div", null, 
       React.createElement("h2", null, "Dual Filter DEMO for Moedict"), 
-      "Click and select moedict.kdb ", React.createElement("input", {type: "file", accept: ".kdb", onChange: this.openLocalFile}), 
-      React.createElement("a", {href: "http://ya.ksana.tw/kdb/moedict.kdb"}, "Download Moedict.kdb"), " if you don't have it on local disk.", 
+      React.createElement(HTMLFileOpener, {onReady: this.onFileReady}), 
       React.createElement("br", null), "Google Chrome Only", 
       React.createElement("br", null), React.createElement("a", {target: "_new", href: "https://github.com/ksanaforge/dualfilter-sample"}, "Github Repo")
     )
@@ -87,7 +84,7 @@ var maincomponent = React.createClass({displayName: "maincomponent",
   }
 });
 module.exports=maincomponent;
-},{"ksana-simple-api":"ksana-simple-api","ksana2015-dualfilter":"C:\\ksana2015\\node_modules\\ksana2015-dualfilter\\index.js","react":"react"}],"C:\\ksana2015\\node_modules\\ksana2015-dualfilter\\dualfilter.js":[function(require,module,exports){
+},{"ksana-simple-api":"ksana-simple-api","ksana2015-dualfilter":"C:\\ksana2015\\node_modules\\ksana2015-dualfilter\\index.js","ksana2015-htmlfileopener":"C:\\ksana2015\\node_modules\\ksana2015-htmlfileopener\\index.js","react":"react"}],"C:\\ksana2015\\node_modules\\ksana2015-dualfilter\\dualfilter.js":[function(require,module,exports){
 var React=require("react/addons");
 var ReactList=require("react-list");
 var E=React.createElement;
@@ -149,7 +146,79 @@ var DualFilter=React.createClass({
 module.exports=DualFilter;
 },{"react-list":"react-list","react/addons":"react/addons"}],"C:\\ksana2015\\node_modules\\ksana2015-dualfilter\\index.js":[function(require,module,exports){
 module.exports={Component:require("./dualfilter")};
-},{"./dualfilter":"C:\\ksana2015\\node_modules\\ksana2015-dualfilter\\dualfilter.js"}],"C:\\ksana2015\\node_modules\\ksana2015-webruntime\\downloader.js":[function(require,module,exports){
+},{"./dualfilter":"C:\\ksana2015\\node_modules\\ksana2015-dualfilter\\dualfilter.js"}],"C:\\ksana2015\\node_modules\\ksana2015-htmlfileopener\\htmlfileopener.js":[function(require,module,exports){
+var React=require("react");
+var E=React.createElement;
+var PT=React.PropTypes;
+var styles={
+	ready:{backgroundColor:"green",color:"yellow"}
+}
+var getFilesFromKsanajs=function() {
+	var o={};
+	ksana.js.files.map(function(file){
+		if (file.substr(file.length-4)!==".kdb") return;
+		kdbid=file.substr(file.lastIndexOf("/")+1);
+		kdbid=kdbid.substr(0,kdbid.length-4);
+
+		o[kdbid]=file;
+	});
+	return o;
+}
+var HTMLFileOpener=React.createClass({
+	propTypes:{
+		files:PT.object // { kdbid:url}
+		,onReady:PT.func.isRequired
+	}
+	,getInitialState:function() {
+		return {ready:{} };
+	}
+	,renderStatus:function(kdbid,url) {
+		if(this.state.ready[kdbid]){
+			return E("span",{style:styles.ready},"Ready");
+		} else {
+			return E("span",null,E("a",{href:url},"Download "));
+		}
+	}
+	,renderFileStatus:function(){
+		var o=[];
+		for (var kdbid in this.props.files) {
+			var url=this.props.files[kdbid];
+			o.push(E("div",{key:kdbid},kdbid+".kdb ",this.renderStatus(kdbid,url)));
+		}
+		return o;
+	}
+	,getDefaultProps:function(){
+		return {files:getFilesFromKsanajs()};
+	}
+	,openFile:function(e) {
+		var files=e.target.files;
+		var ready=this.state.ready;
+		for (var i=0;i<files.length;i++) {
+			var kdbid=files[i].name;
+			kdbid=kdbid.substr(0,kdbid.length-4);
+			if (this.props.files[kdbid]) {
+				ready[kdbid]=files[i];
+			}
+		}
+		if (Object.keys(ready).length==Object.keys(this.props.files).length) {
+			this.props.onReady(ready);
+		}
+		this.setState({ready:ready});
+	}
+	,render:function() {
+		var opts={type:"file", accept:".kdb", onChange:this.openFile}
+		if (Object.keys(this.props.files).length>1) opts.multiple="multiple";
+    return E("div",null
+    	, this.renderFileStatus()
+    	, E("input",opts)
+    	,"click download if you don't have the kdb on your disk"
+    );
+	}
+});
+module.exports=HTMLFileOpener;
+},{"react":"react"}],"C:\\ksana2015\\node_modules\\ksana2015-htmlfileopener\\index.js":[function(require,module,exports){
+module.exports={Component:require("./htmlfileopener")};
+},{"./htmlfileopener":"C:\\ksana2015\\node_modules\\ksana2015-htmlfileopener\\htmlfileopener.js"}],"C:\\ksana2015\\node_modules\\ksana2015-webruntime\\downloader.js":[function(require,module,exports){
 
 var userCancel=false;
 var files=[];
