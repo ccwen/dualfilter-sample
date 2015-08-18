@@ -51,15 +51,21 @@ var maincomponent = React.createClass({displayName: "maincomponent",
     return ksa.renderHits(this.state.text,this.state.hits,E.bind(null,"span"));
   }
   ,openLocalFile:function(e) {
-    db=e.target.files[0];
-    this.setState({localmode:false,ready:true});
+    var file=e.target.files[0];
+    if (!file)return;
+    if (file.name.indexOf("moedict.kdb")>-1) {
+      this.setState({localmode:false,ready:true});
+      db=file;
+    }
   }
   ,renderOpenKDB:function() {
     if (!this.state.localmode)return React.createElement("div", null, "Loading ", db);
     return React.createElement("div", null, 
       React.createElement("h2", null, "Dual Filter DEMO for Moedict"), 
       "Click and select moedict.kdb ", React.createElement("input", {type: "file", accept: ".kdb", onChange: this.openLocalFile}), 
-      React.createElement("a", {href: "http://ya.ksana.tw/kdb/moedict.kdb"}, "Download Moedict.kdb"), " if you don't have it on local disk."
+      React.createElement("a", {href: "http://ya.ksana.tw/kdb/moedict.kdb"}, "Download Moedict.kdb"), " if you don't have it on local disk.", 
+      React.createElement("br", null), "Google Chrome Only", 
+      React.createElement("br", null), React.createElement("a", {target: "_new", href: "https://github.com/ksanaforge/dualfilter-sample"}, "Github Repo")
     )
   }
   ,render: function() {
@@ -75,8 +81,7 @@ var maincomponent = React.createClass({displayName: "maincomponent",
       ), 
       React.createElement("div", {style: styles.rightpanel}, 
         React.createElement("h2", null, this.state.uti), 
-        this.renderText(), 
-        React.createElement("br", null), React.createElement("a", {target: "_new", href: "https://github.com/ksanaforge/dualfilter-sample"}, "Github Repo")
+        this.renderText()
       )
     )    
   }

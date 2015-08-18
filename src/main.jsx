@@ -42,8 +42,12 @@ var maincomponent = React.createClass({
     return ksa.renderHits(this.state.text,this.state.hits,E.bind(null,"span"));
   }
   ,openLocalFile:function(e) {
-    db=e.target.files[0];
-    this.setState({localmode:false,ready:true});
+    var file=e.target.files[0];
+    if (!file)return;
+    if (file.name.indexOf("moedict.kdb")>-1) {
+      this.setState({localmode:false,ready:true});
+      db=file;
+    }
   }
   ,renderOpenKDB:function() {
     if (!this.state.localmode)return <div>Loading {db}</div>;
@@ -51,6 +55,8 @@ var maincomponent = React.createClass({
       <h2>Dual Filter DEMO for Moedict</h2>
       Click and select moedict.kdb <input type="file" accept=".kdb" onChange={this.openLocalFile}></input>
       <a href="http://ya.ksana.tw/kdb/moedict.kdb">Download Moedict.kdb</a> if you don't have it on local disk.
+      <br/>Google Chrome Only
+      <br/><a target="_new" href="https://github.com/ksanaforge/dualfilter-sample">Github Repo</a>
     </div>
   }
   ,render: function() {
@@ -67,7 +73,6 @@ var maincomponent = React.createClass({
       <div style={styles.rightpanel}>
         <h2>{this.state.uti}</h2>
         {this.renderText()}
-        <br/><a target="_new" href="https://github.com/ksanaforge/dualfilter-sample">Github Repo</a>
       </div>
     </div>    
   }
