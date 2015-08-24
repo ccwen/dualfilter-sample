@@ -17,7 +17,7 @@ var db="moedict";
 var styles={
   container:{display:"flex"}
   ,dualfilter:{flex:1,height:"100%",overflowY:"auto"}
-  ,rightpanel:{flex:2}
+  ,rightpanel:{flex:3}
   ,input:{fontSize:"100%",width:"100%"}
 }
 var maincomponent = React.createClass({displayName: "maincomponent",
@@ -34,8 +34,8 @@ var maincomponent = React.createClass({displayName: "maincomponent",
     }.bind(this));
   }
   ,onFilter:function(tofind1,tofind2) {
-    ksa.filter({db:db,regex:tofind1,q:tofind2},function(err,items,hits){
-      this.setState({items:items,hits:hits,q:tofind2},function(){
+    ksa.filter({db:db,regex:tofind1,q:tofind2},function(err,items){
+      this.setState({items:items,q:tofind2},function(){
         this.fetchText(items[0]);
       }.bind(this));
     }.bind(this));
@@ -72,7 +72,7 @@ var maincomponent = React.createClass({displayName: "maincomponent",
         React.createElement(DualFilter, {items: this.state.items, hits: this.state.hits, 
           inputstyle: styles.input, 
           tofind1: "族$", 
-          tofind2: "少數", 
+          tofind2: "雲南", 
           onItemClick: this.onItemClick, 
           onFilter: this.onFilter})
       ), 
@@ -103,11 +103,12 @@ var DualFilter=React.createClass({
     }
   }
   ,getDefaultProps:function(){
-    return {items:[],hits:[]};
+    return {items:[],hits:[],vpos:[]};
   }
   ,propTypes:{
     items:PT.array.isRequired
     ,hits:PT.array
+    ,vpos:PT.array
     ,onFilter:PT.func.isRequired
     ,onItemClick:PT.func.isRequired
     ,inputstyle:PT.object
@@ -115,8 +116,12 @@ var DualFilter=React.createClass({
 
   }
   ,renderItem:function(i,idx){
-    //var hit=(this.props.hits[i]||[]).length||"";
-    return E("div",{key:idx,style:styles.item,onClick:this.props.onItemClick},this.props.items[i]);
+    var hit=(this.props.hits[i]||[]).length||"";
+    var vpos=this.props.vpos[i]||0;
+    return E("div",{key:idx,style:styles.item
+      ,"data-vpos":vpos
+      ,"data-hit":hit
+      ,onClick:this.props.onItemClick},this.props.items[i]);
   }
   ,preparesearch:function() {
     clearTimeout(this.timer);

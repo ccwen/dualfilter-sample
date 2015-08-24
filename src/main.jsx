@@ -8,7 +8,7 @@ var db="moedict";
 var styles={
   container:{display:"flex"}
   ,dualfilter:{flex:1,height:"100%",overflowY:"auto"}
-  ,rightpanel:{flex:2}
+  ,rightpanel:{flex:3}
   ,input:{fontSize:"100%",width:"100%"}
 }
 var maincomponent = React.createClass({
@@ -25,8 +25,8 @@ var maincomponent = React.createClass({
     }.bind(this));
   }
   ,onFilter:function(tofind1,tofind2) {
-    ksa.filter({db:db,regex:tofind1,q:tofind2},function(err,items,hits){
-      this.setState({items:items,hits:hits,q:tofind2},function(){
+    ksa.filter({db:db,regex:tofind1,q:tofind2},function(err,items){
+      this.setState({items:items,q:tofind2},function(){
         this.fetchText(items[0]);
       }.bind(this));
     }.bind(this));
@@ -63,7 +63,7 @@ var maincomponent = React.createClass({
         <DualFilter items={this.state.items} hits={this.state.hits}
           inputstyle={styles.input}
           tofind1="族$"
-          tofind2="少數"
+          tofind2="雲南"
           onItemClick={this.onItemClick}
           onFilter={this.onFilter} />
       </div>

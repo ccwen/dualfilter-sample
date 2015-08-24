@@ -805,7 +805,7 @@ var absSegToFileSeg=function(absoluteseg) {
 	var filesegcount=this.get("filesegcount");
 	var s=absoluteseg;
 	var file=0;
-	while (s>filesegcount[file]) {
+	while (s>=filesegcount[file]) {
 		file++;
 	}
 	if (file) {
@@ -886,7 +886,9 @@ var getFileSegOffsets=function(i) {
 var absSegFromVpos=function(vpos) { 
 	var segoffsets=this.get(["segoffsets"]);
 	var i=bsearch(segoffsets,vpos,true);
-	while (segoffsets[i]==vpos) i++;
+	if (segoffsets[i]>vpos && segoffsets[i-1]<vpos) {
+		return i-1;
+	}
 	return i;
 }
 
@@ -1065,7 +1067,7 @@ var txt2absseg=function(txtid) {
 var txtid2fileSeg=function(txtid) {
 	var absseg=txt2absseg.call(this,txtid);
 	if (!absseg) return;
-	return absSegToFileSeg.call(this,absseg-1);
+	return absSegToFileSeg.call(this,absseg);
 }
 
 var vpos2txtid=function(vpos){
@@ -1090,7 +1092,7 @@ var txtid2vpos=function(txtid) {
 	var absseg=txt2absseg.call(this,txtid);
 	if (!absseg) return;
 	var segoffsets=this.get("segoffsets");
-	return segoffsets[absseg-1];
+	return segoffsets[absseg];
 
 }
 var setup=function(engine) {
@@ -1132,9 +1134,9 @@ var buildSegnameIndex=function(engine){
 	/* replace txtid,txtid_idx, txtid_invert , save 400ms load time */
 	var segnames=engine.get("segnames");
 	var segindex={};
-	for (var i=1;i<=segnames.length;i++) {
-		var segname=segnames[i-1];
-		segindex[segname]=i; //assuming unique segname
+	for (var i=0;i<segnames.length;i++) {
+		var segname=segnames[i];
+		segindex[segname]=i;
 	}
 	engine.txtid=segindex;
 }
@@ -4540,7 +4542,7 @@ var toc=function(opts,cb,context) {
 		if (err) {
 			cb(err);
 		} else {
-			var tocname=res.engine.get("meta").toc;
+			var tocname=opts.tocname||res.engine.get("meta").tocs[0];
 			res.engine.getTOC({tocname:tocname},function(data){
 				cb(0,{name:tocname,toc:data,hits:res.rawresult,tocname:tocname});
 			});
@@ -4583,7 +4585,8 @@ var fetch=function(opts,cb,context) {
 				var vpos=opts.vpos;
 				if (typeof vpos!="object") vpos=[vpos];
 				for (var i=0;i<vpos.length;i++) {
-					uti.push(res.engine.vpos2txtid(vpos[i]));
+					var u=res.engine.vpos2txtid(vpos[i]);
+					uti.push(u);
 				}
 			}
 			if (typeof uti!=="object") uti=[uti];
@@ -4676,27 +4679,46 @@ var filterField=function(items,regex,filterfunc) {
 
 var groupByField=function(db,rawresult,field,regex,filterfunc,cb) {
 	db.get(["fields",field],function(fields){
-		if (!rawresult||!rawresult.length) {
-			var matches=filterField(fields,regex,filterfunc);
-			cb(0,matches);
-		} else {
-			db.get(["fields",field+"_vpos"],function(fieldsvpos){
+
+		db.get([["fields",field+"_vpos"],["fields",field+"_depth"]],function(res){
+			var fieldsvpos=res[0],fieldsdepth=res[1];
+			if (!rawresult||!rawresult.length) {
+				var matches=filterField(fields,regex,filterfunc);
+				cb(0,matches,null,fieldsvpos);
+			} else {
 				var fieldhits= plist.groupbyposting2(rawresult, fieldsvpos);
-		    var matches=[],hits=[];
+				fieldhits.shift();
+		    var matches=[],hits=[],vpos=[];
 		    var reg=new RegExp(regex);
-		     filterfunc=filterfunc|| reg.test.bind(reg);
+		    filterfunc=filterfunc|| reg.test.bind(reg);
+		    var prevdepth=65535,inrange=false;
 		    for (var i=0;i<fieldhits.length;i++) {
 		      var fieldhit=fieldhits[i];
-		      if (!fieldhit || !fieldhit.length) continue;
-		      var item=txtid[txtid_invert[i]-1];
+		      var item=fields[i];
+
+		      //all depth less than prevdepth will considered in range.
 		      if (filterfunc(item,regex)) {
+		      	inrange=true;
+		      	if (prevdepth>fieldsdepth[i]) {
+		      		prevdepth=fieldsdepth[i];
+		      	}
+		      } else if (inrange) {
+		      	if (fieldsdepth[i]==prevdepth) {//turn off inrange
+		      		inrange=false;
+		      		prevdepth=65535;
+		      	}
+		      }
+
+		      if (!fieldhit || !fieldhit.length) continue;
+		      if (inrange) {
 		      	matches.push(item);
 		      	hits.push(fieldhit);
+		      	vpos.push(fieldhit[0]);
 		      }
 		    }		
-				cb(0,matches,hits);
-			});
-		}
+				cb(0,matches,hits,vpos);
+			};
+		});
 	});
 }
 
@@ -4798,11 +4820,34 @@ var renderHits=function(text,hits,func){
   return out;
 }  
 
+var get=function(dbname,key,cb) { //low level get
+	var db=kde.open(dbname,function(err,db){
+		if (err) {
+			cb(err);
+		} else {
+			db.get(key,cb);
+		}
+	});
+}
+var vpos2txtid=function(dbname,vpos,cb){
+	var db=kde.open(dbname,function(err,db){
+		if (err) cb(err);
+		else cb(0,db.vpos2txtid(vpos));
+	});
+}
+var txtid2vpos=function(dbname,txtid,cb){
+	var db=kde.open(dbname,function(err,db){
+		if (err) cb(err);
+		else cb(0,db.txtid2vpos(txtid));
+	});
+}
 var API={
 	next:next,
 	prev:prev,
 	nextUti:nextUti,
-	prevUti:prevUti,	
+	prevUti:prevUti,
+	vpos2txtid:vpos2txtid,
+	txtid2vpos:txtid2vpos,	
 	toc:toc,
 	fetch:fetch,
 	excerpt:excerpt,
@@ -4811,7 +4856,8 @@ var API={
 	listkdb:listkdb,
 	fillHits:fillHits,
 	renderHits:renderHits,
-	tryOpen:tryOpen
+	tryOpen:tryOpen,
+	get:get
 }
 module.exports=API;
 },{"ksana-database":"ksana-database","ksana-search":"ksana-search","ksana-search/plist":20}]},{},[]);
