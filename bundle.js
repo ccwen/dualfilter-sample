@@ -1,12 +1,13 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({"C:\\ksana2015\\dualfilter-sample\\index.js":[function(require,module,exports){
 var React=require("react");
+var ReactDOM=require("react-dom");
 require("ksana2015-webruntime/livereload")(); 
 var ksanagap=require("ksana2015-webruntime/ksanagap");
 ksanagap.boot("dualfilter-sample",function(){
 	var Main=React.createElement(require("./src/main.jsx"));
-	ksana.mainComponent=React.render(Main,document.getElementById("main"));
+	ksana.mainComponent=ReactDOM.render(Main,document.getElementById("main"));
 });
-},{"./src/main.jsx":"C:\\ksana2015\\dualfilter-sample\\src\\main.jsx","ksana2015-webruntime/ksanagap":"C:\\ksana2015\\node_modules\\ksana2015-webruntime\\ksanagap.js","ksana2015-webruntime/livereload":"C:\\ksana2015\\node_modules\\ksana2015-webruntime\\livereload.js","react":"react"}],"C:\\ksana2015\\dualfilter-sample\\src\\main.jsx":[function(require,module,exports){
+},{"./src/main.jsx":"C:\\ksana2015\\dualfilter-sample\\src\\main.jsx","ksana2015-webruntime/ksanagap":"C:\\ksana2015\\node_modules\\ksana2015-webruntime\\ksanagap.js","ksana2015-webruntime/livereload":"C:\\ksana2015\\node_modules\\ksana2015-webruntime\\livereload.js","react":"react","react-dom":"react-dom"}],"C:\\ksana2015\\dualfilter-sample\\src\\main.jsx":[function(require,module,exports){
 var React=require("react");
 var E=React.createElement;
 var ksa=require("ksana-simple-api");
@@ -22,7 +23,8 @@ var styles={
 }
 var maincomponent = React.createClass({displayName: "maincomponent",
   getInitialState:function() {
-    return {items:[],hits:[],itemclick:" ",text:"",q:"",uti:"",localmode:false,ready:false};
+    return {items:[],hits:[],itemclick:" ",text:"",q:"",uti:"",localmode:false,ready:false,
+    tofind1:localStorage.getItem("tofind1")||"河$",q:localStorage.getItem("q")||"山東省"};
   }
   ,componentDidMount:function() {
     ksa.tryOpen(db,function(err){
@@ -33,9 +35,9 @@ var maincomponent = React.createClass({displayName: "maincomponent",
       }
     }.bind(this));
   }
-  ,onFilter:function(tofind1,tofind2) {
-    ksa.filter({db:db,regex:tofind1,q:tofind2},function(err,items){
-      this.setState({items:items,q:tofind2},function(){
+  ,onFilter:function(tofind1,q) {
+    ksa.filter({db:db,regex:tofind1,q:q},function(err,items){
+      this.setState({items:items,q:q,tofind1:tofind1},function(){
         this.fetchText(items[0]);
       }.bind(this));
     }.bind(this));
@@ -71,8 +73,8 @@ var maincomponent = React.createClass({displayName: "maincomponent",
       React.createElement("div", {style: styles.dualfilter}, 
         React.createElement(DualFilter, {items: this.state.items, hits: this.state.hits, 
           inputstyle: styles.input, 
-          tofind1: "族$", 
-          tofind2: "雲南", 
+          tofind1: this.state.tofind1, 
+          tofind2: this.state.q, 
           onItemClick: this.onItemClick, 
           onFilter: this.onFilter})
       ), 
@@ -85,7 +87,7 @@ var maincomponent = React.createClass({displayName: "maincomponent",
 });
 module.exports=maincomponent;
 },{"ksana-simple-api":"ksana-simple-api","ksana2015-dualfilter":"C:\\ksana2015\\node_modules\\ksana2015-dualfilter\\index.js","ksana2015-htmlfileopener":"C:\\ksana2015\\node_modules\\ksana2015-htmlfileopener\\index.js","react":"react"}],"C:\\ksana2015\\node_modules\\ksana2015-dualfilter\\dualfilter.js":[function(require,module,exports){
-var React=require("react/addons");
+var React=require("react");
 var ReactList=require("react-list");
 var E=React.createElement;
 var PT=React.PropTypes;
@@ -144,12 +146,14 @@ var DualFilter=React.createClass({
       ,E("br")
       ,E(Input,{placeholder:"full text search",style:this.props.inputstyle,value:this.state.tofind2,onChange:this.onChange2})
       ,E("br")
+      ,E("span",null,"match count:",this.props.items.length)
+      ,E("br")
       ,E(ReactList,{itemRenderer:this.renderItem,length:this.props.items.length})
     )
 	}
 })
 module.exports=DualFilter;
-},{"react-list":"react-list","react/addons":"react/addons"}],"C:\\ksana2015\\node_modules\\ksana2015-dualfilter\\index.js":[function(require,module,exports){
+},{"react":"react","react-list":"react-list"}],"C:\\ksana2015\\node_modules\\ksana2015-dualfilter\\index.js":[function(require,module,exports){
 module.exports={Component:require("./dualfilter")};
 },{"./dualfilter":"C:\\ksana2015\\node_modules\\ksana2015-dualfilter\\dualfilter.js"}],"C:\\ksana2015\\node_modules\\ksana2015-htmlfileopener\\htmlfileopener.js":[function(require,module,exports){
 var React=require("react");
@@ -672,12 +676,16 @@ var boot=function(appId,cb) {
 		loadKsanajs();
 	}
 	ksana.appId=appId;
+	if (ksana.ready) {
+		cb();
+		return;
+	}
 	var timer=setInterval(function(){
 			if (ksana.ready){
 				clearInterval(timer);
 				cb();
 			}
-		});
+		},100);
 }
 
 

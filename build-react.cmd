@@ -1,1 +1,1 @@
-browserify -r react -r react/addons -r react-bootstrap -u react-native -r react-list> react-bundle.js
+browserify -r react -r react-dom -r react-bootstrap -u react-native -r react-list> react-bundle.js

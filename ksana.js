@@ -1,6 +1,6 @@
 jsonp_handler({
  "version": "1",
- "build": 207,
+ "build": 223,
  "title": "dualfilter-sample",
  "minruntime": 1,
  "baseurl": "http://rawgit.com/ksanaforge/dualfilter-sample/master/",
@@ -8,7 +8,7 @@ jsonp_handler({
  "browserify": {
   "external": [
    "react",
-   "react/addons",
+   "react-dom",
    "react-list",
    "react-bootstrap",
    "ksana-jsonrom",
@@ -30,18 +30,18 @@ jsonp_handler({
  "filesizes": [
   546,
   85,
-  991596,
-  129748,
-  25123,
-  863
+  1148419,
+  134514,
+  25401,
+  861
  ],
  "filedates": [
   "2015-08-15T16:05:33.729Z",
   "2015-08-15T11:29:05.428Z",
-  "2015-08-24T06:14:37.307Z",
-  "2015-08-24T06:14:08.561Z",
-  "2015-08-24T06:56:13.899Z",
-  "2015-08-24T06:56:07.432Z"
+  "2015-11-10T02:48:30.211Z",
+  "2015-11-10T06:09:24.253Z",
+  "2015-11-10T06:17:44.673Z",
+  "2015-11-10T06:17:15.032Z"
  ],
- "date": "2015-08-24T06:56:14.893Z"
+ "date": "2015-11-10T06:17:45.665Z"
 })

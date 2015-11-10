@@ -13,7 +13,8 @@ var styles={
 }
 var maincomponent = React.createClass({
   getInitialState:function() {
-    return {items:[],hits:[],itemclick:" ",text:"",q:"",uti:"",localmode:false,ready:false};
+    return {items:[],hits:[],itemclick:" ",text:"",q:"",uti:"",localmode:false,ready:false,
+    tofind1:localStorage.getItem("tofind1")||"河$",q:localStorage.getItem("q")||"山東省"};
   }
   ,componentDidMount:function() {
     ksa.tryOpen(db,function(err){
@@ -24,9 +25,9 @@ var maincomponent = React.createClass({
       }
     }.bind(this));
   }
-  ,onFilter:function(tofind1,tofind2) {
-    ksa.filter({db:db,regex:tofind1,q:tofind2},function(err,items){
-      this.setState({items:items,q:tofind2},function(){
+  ,onFilter:function(tofind1,q) {
+    ksa.filter({db:db,regex:tofind1,q:q},function(err,items){
+      this.setState({items:items,q:q,tofind1:tofind1},function(){
         this.fetchText(items[0]);
       }.bind(this));
     }.bind(this));
@@ -62,8 +63,8 @@ var maincomponent = React.createClass({
       <div style={styles.dualfilter}>
         <DualFilter items={this.state.items} hits={this.state.hits}
           inputstyle={styles.input}
-          tofind1="族$"
-          tofind2="雲南"
+          tofind1={this.state.tofind1}
+          tofind2={this.state.q}
           onItemClick={this.onItemClick}
           onFilter={this.onFilter} />
       </div>
