@@ -13,17 +13,21 @@ var E=React.createElement;
 var ksa=require("ksana-simple-api");
 var DualFilter=require("ksana2015-dualfilter").Component;
 var HTMLFileOpener=require("ksana2015-htmlfileopener").Component;
-
+var utils=require("./utils");
 var db="moedict";
 var styles={
   container:{display:"flex"}
   ,dualfilter:{flex:1,height:"100%",overflowY:"auto"}
   ,rightpanel:{flex:3}
   ,input:{fontSize:"100%",width:"100%"}
+  ,bodytext:{outline:0}
+  ,link:{cursor:"pointer",borderBottom:"1px solid blue"}
+  ,selectedLink:{cursor:"pointer",background:"yellow"}
+  ,title:{fontFamily:"DFKai-SB"}
 }
 var maincomponent = React.createClass({displayName: "maincomponent",
   getInitialState:function() {
-    return {items:[],hits:[],itemclick:" ",text:"",q:"",uti:"",localmode:false,ready:false,
+    return {items:[],hits:[],itemclick:" ",text:"",q:"",uti:"",localmode:false,ready:false,links:[],
     tofind1:localStorage.getItem("tofind1")||"河$",q:localStorage.getItem("q")||"山東省"};
   }
   ,componentDidMount:function() {
@@ -47,7 +51,16 @@ var maincomponent = React.createClass({displayName: "maincomponent",
   ,fetchText:function(uti){
     ksa.fetch({db:db,uti:uti,q:this.state.q},function(err,content){
       if (!content || !content.length) return;
-      this.setState({uti:uti,text:content[0].text,hits:content[0].hits});  
+      this.setState({uti:uti,text:content[0].text,hits:content[0].hits,link:"",links:[]},function(){
+        this.refs.bodytext.contentEditable=true;
+      }.bind(this));  
+    }.bind(this));
+  }
+  ,fetchText2:function(uti){
+    if (!uti)return;
+    ksa.fetch({db:db,uti:uti},function(err,content){
+      if (!content || !content.length) return;
+      this.setState({link:uti,text2:content[0].text});
     }.bind(this));
   }
   ,onItemClick:function(e) {
@@ -69,6 +82,22 @@ var maincomponent = React.createClass({displayName: "maincomponent",
       React.createElement("br", null), React.createElement("a", {target: "_new", href: "https://github.com/ksanaforge/dualfilter-sample"}, "Github Repo")
     )
   }
+  ,bodytextmouseup:function(e) {
+    var offset=utils.getCaretCharacterOffsetWithin(this.refs.bodytext);
+    var cursortext=this.state.text.substr(offset).match(/[\u3400-\u9fff\ud800-\udfff]*/);
+    if (!cursortext)return;
+    var res=utils.tryEntry(db,cursortext[0],function(res){
+      this.setState({links:res});
+      this.fetchText2(res[0]);
+    }.bind(this));
+  }
+  ,golink:function(e) {
+    this.fetchText2(e.target.innerHTML);
+  }
+  ,renderLink:function(item,idx) {
+    var style=(item===this.state.link)?styles.selectedLink:styles.link;
+    return React.createElement("span", {key: idx}, React.createElement("span", {style: style, onClick: this.golink}, item), " ")
+  }
   ,render: function() {
     if (!this.state.ready) return this.renderOpenKDB();
     return React.createElement("div", {style: styles.container}, 
@@ -81,14 +110,73 @@ var maincomponent = React.createClass({displayName: "maincomponent",
           onFilter: this.onFilter})
       ), 
       React.createElement("div", {style: styles.rightpanel}, 
-        React.createElement("h2", null, this.state.uti), 
-        this.renderText()
+        React.createElement("h2", {style: styles.title}, this.state.uti), 
+        React.createElement("div", {onMouseUp: this.bodytextmouseup, ref: "bodytext", style: styles.bodytext}, this.renderText()), 
+        this.state.links.map(this.renderLink), 
+        React.createElement("div", {ref: "bodytext2"}, this.state.text2)
       )
     )    
   }
 });
 module.exports=maincomponent;
-},{"ksana-simple-api":"ksana-simple-api","ksana2015-dualfilter":"C:\\ksana2015\\node_modules\\ksana2015-dualfilter\\index.js","ksana2015-htmlfileopener":"C:\\ksana2015\\node_modules\\ksana2015-htmlfileopener\\index.js","react":"react"}],"C:\\ksana2015\\node_modules\\ksana2015-dualfilter\\dualfilter.js":[function(require,module,exports){
+},{"./utils":"C:\\ksana2015\\dualfilter-sample\\src\\utils.js","ksana-simple-api":"ksana-simple-api","ksana2015-dualfilter":"C:\\ksana2015\\node_modules\\ksana2015-dualfilter\\index.js","ksana2015-htmlfileopener":"C:\\ksana2015\\node_modules\\ksana2015-htmlfileopener\\index.js","react":"react"}],"C:\\ksana2015\\dualfilter-sample\\src\\utils.js":[function(require,module,exports){
+
+/* from http://stackoverflow.com/questions/4811822/get-a-ranges-start-and-end-offsets-relative-to-its-parent-container/4812022#4812022
+*/
+var ksa=require("ksana-simple-api");
+var indexOfSorted = function (array, obj, near) { 
+  var low = 0,
+  high = array.length;
+  while (low < high) {
+    var mid = (low + high) >> 1;
+    if (array[mid]==obj) return mid;
+    array[mid] < obj ? low = mid + 1 : high = mid;
+  }
+  if (near) return low;
+  else if (array[low]==obj) return low;else return -1;
+};
+/* find all possible entry after cursor*/
+var tryEntry=function(db,cursortext,cb) {
+    var first=cursortext[0],out=[];
+    var segnames=ksa.get(db,"segnames",function(segnames){
+        var start=indexOfSorted(segnames,first,true);
+        while (true) {
+            var entry=segnames[start];
+            if (cursortext.length>entry.length && cursortext.substr(0,entry.length)===entry) {
+                out.push(entry);
+            }
+            if (start>=segnames.length || entry[0]!==first) break;
+            start++;
+        }
+        out.sort(function(a,b){return b.length-a.length});
+        cb(out);
+    });
+}
+var getCaretCharacterOffsetWithin=function (element) {
+    var caretOffset = 0;
+    var doc = element.ownerDocument || element.document;
+    var win = doc.defaultView || doc.parentWindow;
+    var sel;
+    if (typeof win.getSelection != "undefined") {
+        sel = win.getSelection();
+        if (sel.rangeCount > 0) {
+            var range = win.getSelection().getRangeAt(0);
+            var preCaretRange = range.cloneRange();
+            preCaretRange.selectNodeContents(element);
+            preCaretRange.setEnd(range.endContainer, range.endOffset);
+            caretOffset = preCaretRange.toString().length;
+        }
+    } else if ( (sel = doc.selection) && sel.type != "Control") {
+        var textRange = sel.createRange();
+        var preCaretTextRange = doc.body.createTextRange();
+        preCaretTextRange.moveToElementText(element);
+        preCaretTextRange.setEndPoint("EndToEnd", textRange);
+        caretOffset = preCaretTextRange.text.length;
+    }
+    return caretOffset;
+}
+module.exports={getCaretCharacterOffsetWithin:getCaretCharacterOffsetWithin,tryEntry:tryEntry};
+},{"ksana-simple-api":"ksana-simple-api"}],"C:\\ksana2015\\node_modules\\ksana2015-dualfilter\\dualfilter.js":[function(require,module,exports){
 var React=require("react");
 var ReactList=require("react-list");
 var E=React.createElement;

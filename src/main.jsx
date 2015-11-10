@@ -3,17 +3,21 @@ var E=React.createElement;
 var ksa=require("ksana-simple-api");
 var DualFilter=require("ksana2015-dualfilter").Component;
 var HTMLFileOpener=require("ksana2015-htmlfileopener").Component;
-
+var utils=require("./utils");
 var db="moedict";
 var styles={
   container:{display:"flex"}
   ,dualfilter:{flex:1,height:"100%",overflowY:"auto"}
   ,rightpanel:{flex:3}
   ,input:{fontSize:"100%",width:"100%"}
+  ,bodytext:{outline:0}
+  ,link:{cursor:"pointer",borderBottom:"1px solid blue"}
+  ,selectedLink:{cursor:"pointer",background:"yellow"}
+  ,title:{fontFamily:"DFKai-SB"}
 }
 var maincomponent = React.createClass({
   getInitialState:function() {
-    return {items:[],hits:[],itemclick:" ",text:"",q:"",uti:"",localmode:false,ready:false,
+    return {items:[],hits:[],itemclick:" ",text:"",q:"",uti:"",localmode:false,ready:false,links:[],
     tofind1:localStorage.getItem("tofind1")||"河$",q:localStorage.getItem("q")||"山東省"};
   }
   ,componentDidMount:function() {
@@ -37,7 +41,16 @@ var maincomponent = React.createClass({
   ,fetchText:function(uti){
     ksa.fetch({db:db,uti:uti,q:this.state.q},function(err,content){
       if (!content || !content.length) return;
-      this.setState({uti:uti,text:content[0].text,hits:content[0].hits});  
+      this.setState({uti:uti,text:content[0].text,hits:content[0].hits,link:"",links:[]},function(){
+        this.refs.bodytext.contentEditable=true;
+      }.bind(this));  
+    }.bind(this));
+  }
+  ,fetchText2:function(uti){
+    if (!uti)return;
+    ksa.fetch({db:db,uti:uti},function(err,content){
+      if (!content || !content.length) return;
+      this.setState({link:uti,text2:content[0].text});
     }.bind(this));
   }
   ,onItemClick:function(e) {
@@ -59,6 +72,22 @@ var maincomponent = React.createClass({
       <br/><a target="_new" href="https://github.com/ksanaforge/dualfilter-sample">Github Repo</a>
     </div>
   }
+  ,bodytextmouseup:function(e) {
+    var offset=utils.getCaretCharacterOffsetWithin(this.refs.bodytext);
+    var cursortext=this.state.text.substr(offset).match(/[\u3400-\u9fff\ud800-\udfff]*/);
+    if (!cursortext)return;
+    var res=utils.tryEntry(db,cursortext[0],function(res){
+      this.setState({links:res});
+      this.fetchText2(res[0]);
+    }.bind(this));
+  }
+  ,golink:function(e) {
+    this.fetchText2(e.target.innerHTML);
+  }
+  ,renderLink:function(item,idx) {
+    var style=(item===this.state.link)?styles.selectedLink:styles.link;
+    return <span key={idx}><span style={style} onClick={this.golink}>{item}</span> </span>
+  }
   ,render: function() {
     if (!this.state.ready) return this.renderOpenKDB();
     return <div style={styles.container}>    
@@ -71,8 +100,10 @@ var maincomponent = React.createClass({
           onFilter={this.onFilter} />
       </div>
       <div style={styles.rightpanel}>
-        <h2>{this.state.uti}</h2>
-        {this.renderText()}
+        <h2 style={styles.title}>{this.state.uti}</h2>
+        <div onMouseUp={this.bodytextmouseup} ref="bodytext" style={styles.bodytext}>{this.renderText()}</div>
+        {this.state.links.map(this.renderLink)}
+        <div ref="bodytext2">{this.state.text2}</div>
       </div>
     </div>    
   }
