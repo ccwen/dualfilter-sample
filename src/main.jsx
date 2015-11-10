@@ -41,7 +41,7 @@ var maincomponent = React.createClass({
   ,fetchText:function(uti){
     ksa.fetch({db:db,uti:uti,q:this.state.q},function(err,content){
       if (!content || !content.length) return;
-      this.setState({uti:uti,text:content[0].text,hits:content[0].hits,link:"",links:[]},function(){
+      this.setState({uti:uti,text:content[0].text,hits:content[0].hits,text2:"",link:"",links:[]},function(){
         this.refs.bodytext.contentEditable=true;
       }.bind(this));  
     }.bind(this));
