@@ -37,6 +37,8 @@ var maincomponent = React.createClass({displayName: "maincomponent",
   }
   ,onFilter:function(tofind1,q) {
     ksa.filter({db:db,regex:tofind1,q:q},function(err,items){
+      localStorage.setItem("tofind1",tofind1);
+      localStorage.setItem("q",q);
       this.setState({items:items,q:q,tofind1:tofind1},function(){
         this.fetchText(items[0]);
       }.bind(this));
