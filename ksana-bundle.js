@@ -637,6 +637,9 @@ var filterkdb=function(files,parent){
 	var output=[];
 	var fs=require("fs");
 	var path=require("path");
+	if (parent.length==3 && parent[1]==":") {
+		return output;
+	}
 	files.map(function(f){
 		var subdir=parent+path.sep+f;
 		var stat=fs.statSync(subdir);
@@ -655,6 +658,7 @@ var filterkdb=function(files,parent){
 	});
 	return output;
 }	
+
 
 var listkdb_node=function(cb,context){
 	var fs=require("fs");
@@ -1081,13 +1085,13 @@ var nextTxtid=function(txtid) {
 	var absseg=txt2absseg.call(this,txtid);
 	if (!absseg) return;
 	var segnames=this.get("segnames");
-	return segnames[absseg];
+	return segnames[absseg+1];
 }
 var prevTxtid=function(txtid) {
 	var absseg=txt2absseg.call(this,txtid);
 	if (!absseg) return;
 	var segnames=this.get("segnames");
-	return segnames[absseg-2];
+	return segnames[absseg-1];
 }
 var txtid2vpos=function(txtid) {
 	var absseg=txt2absseg.call(this,txtid);
@@ -4658,24 +4662,35 @@ var prevUti=function(opts,cb){
 	});		
 }
 
-var _iterate=function(funcname,opts,cb,context) {
-	kse.search(opts.db,opts.q,function(err,res){
-		var db=res.engine;
-		if (err) {
-			cb(err);
-			return;
-		}
-		var out=[];
-		var next=opts.uti;
-		var count=opts.count||10;
-		var func=db[funcname];
-		for (var i=0;i<count;i++) {
-			var next=func(next);
-			if (!next) break;
+var __iterate=function(db,funcname,opts,cb,context){
+	var out=[];
+	var next=opts.uti;
+	var count=opts.count||10;
+	var func=db[funcname];
+	for (var i=0;i<count;i++) {
+		next=func.call(db,next);
+		if (!next) break;
+
+		if (funcname==="nextTxtid") {
 			out.push(next);
+		} else {
+			out.unshift(next);
 		}
-		opts.uti=out;
-		fetch(opts,cb,context);
+	}
+	opts.uti=out;
+	fetch(opts,cb,context);
+}
+var _iterate=function(funcname,opts,cb,context) {
+	if (!opts.q) {
+		kde.open(opts.db,function(err,db){
+			if (!err) __iterate(db,funcname,opts,cb,context);
+			else console.error(err);
+		});
+		return;
+	}
+	kse.search(opts.db,opts.q,function(err,res){
+		if (!err) __iterate(res.engine,funcname,opts,cb,context);
+		else console.error(err);
 	});
 }
 
@@ -4688,6 +4703,17 @@ var prev=function(opts,cb,context) {
 
 var toc=function(opts,cb,context) {
 	var that=this;
+	
+	if (!opts.q) {
+		kde.open(opts.db,function(err,db){
+			var tocname=opts.tocname||db.get("meta").toc;
+			db.getTOC({tocname:tocname},function(data){
+				cb(0,{name:tocname,toc:data,tocname:tocname});
+			});
+		});
+		return;
+	}
+
 	kse.search(opts.db,opts.q,{},function(err,res){
 		if (!res) throw "cannot open database "+opts.db;
 		var tocname=opts.tocname||res.engine.get("meta").toc;
@@ -4704,7 +4730,8 @@ var txtids2key=function(txtids) {
 	var out=[];
 	for (var i=0;i<txtids.length;i++) {
 		var fseg=this.txtid2fileSeg(txtids[i]);
-		out.push(["filecontents",fseg.file,fseg.seg]);
+		if (!fseg) out.push(["filecontents",0,0]);
+		else out.push(["filecontents",fseg.file,fseg.seg]);
 	}
 	return out;
 }
@@ -4716,44 +4743,60 @@ var hits2markup=function( Q,file,seg, text){
 	var hits=kse.excerpt.realHitInRange(Q,vpos,vpos2,text);
 	return hits;
 }
+
+var fetch_res=function(engine,Q,opts,cb){
+	var uti=opts.uti;
+		if (!uti) {
+			uti=[];
+			var vpos=opts.vpos;
+			if (typeof vpos!="object") vpos=[vpos];
+			for (var i=0;i<vpos.length;i++) {
+				var u=engine.vpos2txtid(vpos[i]);
+				uti.push(u);
+			}
+		}
+		if (typeof uti!=="object") uti=[uti];
+
+		var keys=txtids2key.call(engine,uti);
+		if (!keys || !keys.length || typeof keys[0][1]=="undefined") {
+			cb("uti not found: "+uti+" in "+opts.db);
+			return;
+		}
+
+		engine.get(keys,function(data){
+			var out=[];
+			for (var i=0;i<keys.length;i++) {
+				var hits=null;
+				if (Q) hits=hits2markup.call(engine,Q,keys[i][1],keys[i][2],data[i]);
+				var vpos=engine.txtid2vpos(uti[i]);
+				out.push({uti:uti[i],text:data[i],hits:hits,vpos:vpos});
+			}
+			cb(0,out);
+		});
+}
 var fetch=function(opts,cb,context) {
 	var that=this;
 	if (!opts.uti && !opts.vpos) {
 		cb("missing uti or vpos");
 		return;
 	}
-	kse.search(opts.db,opts.q,{},function(err,res){
-		if (err) {
-			cb(err);
-		} else {
-			var uti=opts.uti;
-			if (!uti) {
-				uti=[];
-				var vpos=opts.vpos;
-				if (typeof vpos!="object") vpos=[vpos];
-				for (var i=0;i<vpos.length;i++) {
-					var u=res.engine.vpos2txtid(vpos[i]);
-					uti.push(u);
+	if (!opts.q) {
+			kde.open(opts.db,function(err,db){
+				if (err) {
+					cb(err)
+				} else {
+					fetch_res(db,null,opts,cb);
 				}
-			}
-			if (typeof uti!=="object") uti=[uti];
-			var keys=txtids2key.call(res.engine,uti);
-			if (typeof keys[0][1]=="undefined") {
-				cb("uti not found: "+uti+" in "+opts.db);
-				return;
-			}
-
-			res.engine.get(keys,function(data){
-				var out=[];
-				for (var i=0;i<keys.length;i++) {
-					var hits=hits2markup.call(res.engine,res,keys[i][1],keys[i][2],data[i]);
-					var vpos=res.engine.txtid2vpos(uti[i]);
-					out.push({uti:uti[i],text:data[i],hits:hits,vpos:vpos});
-				}
-				cb(0,out);
 			});
-		}
-	});	
+	} else {
+		kse.search(opts.db,opts.q,{},function(err,res){
+			if (err) {
+				cb(err);
+			} else {
+				fetch_res(res.engine,res,opts,cb)
+			}
+		});		
+	}
 }
 
 var excerpt2defaultoutput=function(excerpt) {
@@ -4828,14 +4871,17 @@ var groupByField=function(db,searchres,field,regex,filterfunc,cb) {
 	db.get(["fields",field],function(fields){
 		var rawresult=searchres.rawresult;
 		db.get([["fields",field+"_vpos"],["fields",field+"_depth"]],function(res){
-			var fieldsvpos=res[0],fieldsdepth=res[1];
+			var items=[], fieldsvpos=res[0],fieldsdepth=res[1];
 			if (!rawresult||!rawresult.length) {
 				var matches=filterField(fields,regex,filterfunc);
-				cb(0,matches,null,fieldsvpos);
+				items=matches.map(function(item,idx){
+					return {text:item, uti: db.vpos2txtid(fieldsvpos[idx]), vpos:fieldsvpos[idx]};
+				})
+				cb(0,items);
 			} else {
 				var fieldhits= plist.groupbyposting2(rawresult, fieldsvpos);
 				fieldhits.shift();
-		    var matches=[],hits=[],vpos=[];
+		    var out=[];
 		    var reg=new RegExp(regex);
 		    filterfunc=filterfunc|| reg.test.bind(reg);
 		    var prevdepth=65535,inrange=false;
@@ -4858,12 +4904,10 @@ var groupByField=function(db,searchres,field,regex,filterfunc,cb) {
 
 		      if (!fieldhit || !fieldhit.length) continue;
 		      if (inrange) {
-		      	matches.push(item);
-		      	hits.push(fieldhit);
-		      	vpos.push(fieldhit[0]);
+		      	items.push({text: item, vpos: fieldhit[0], uti:db.vpos2txtid(fieldhit[0]) , hits:fieldhit});
 		      }
 		    }		
-				cb(0,matches,hits,vpos);
+				cb(0,items);
 			};
 		});
 	});
@@ -4877,26 +4921,31 @@ var groupByTxtid=function(db,searchresult,regex,filterfunc,cb) {
 			cb(0,[]);
 		} else {
 			var values=db.get("segnames");
+			var segoffsets=db.get("segoffsets");
 			var matches=filterField(values,regex,filterfunc);
-			cb(0,matches);
+
+			items=matches.map(function(item,idx){
+				return {text:item, uti:item, vpos:db.txtid2vpos(item)};
+			})
+			cb(0,items);
 		}
 	} else {
 		var segoffsets=db.get("segoffsets");
     var seghits= plist.groupbyposting2(rawresult, segoffsets); 
     var txtid=db.get("segnames");
-    var matches=[],hits=[];
+    var out=[];
     var reg=new RegExp(regex);
 		 filterfunc=filterfunc|| reg.test.bind(reg);
     for (var i=0;i<seghits.length;i++) {
       var seghit=seghits[i];
       if (!seghit || !seghit.length) continue;
       var item=txtid[i-1];
+      var vpos=segoffsets[i-1];
 		  if (filterfunc(item,regex)) {
-      	matches.push(item);
-      	hits.push(seghit);
+		  	out.push({text:item,uti:item,hits:seghit,vpos:vpos});
       }
     }
-    cb(0,matches,hits);
+    cb(0,out);
 	}
 }
 
@@ -4993,6 +5042,62 @@ var txtid2vpos=function(dbname,txtid,cb){
 		else cb(0,db.txtid2vpos(txtid));
 	});
 }
+
+var bsearchVposInToc = function (toc, obj, near) { 
+  var low = 0,
+  high = toc.length;
+  while (low < high) {
+    var mid = (low + high) >> 1;
+    if (toc[mid].vpos==obj) return mid-1;
+    toc[mid].vpos < obj ? low = mid + 1 : high = mid;
+  }
+  if (near) return low-1;
+  else if (toc[low].vpos==obj) return low;else return -1;
+};
+//from ksana2015-stackto
+var enumAncestors=function(toc,cur) {
+    if (!toc || !toc.length) return;
+    if (cur==0) return [];
+    var n=cur-1;
+    var depth=toc[cur].d - 1;
+    var parents=[];
+    while (n>=0 && depth>0) {
+      if (toc[n].d==depth) {
+        parents.unshift(n);
+        depth--;
+      }
+      n--;
+    }
+    parents.unshift(0); //first ancestor is root node
+    return parents;
+}
+
+var breadcrumb=function(opts,cb,context) {
+	kde.open(opts.db,function(err,db){
+
+		var vpos=opts.vpos;
+		if (opts.uti && typeof vpos==="undefined") {
+			vpos=db.txtid2vpos(opts.uti);
+		}
+
+		if (!vpos) {
+			cb("must have uti or vpos");
+			return;
+		}
+
+		var tocname=opts.tocname||db.get("meta").toc;
+		db.getTOC({tocname:tocname},function(toc){
+			var p=bsearchVposInToc(toc,vpos,true);
+			var nodes=enumAncestors(toc,p);
+			nodes.push(p);
+			var breadcrumb=nodes.map(function(n){return toc[n]});
+			cb(0,{ nodes: nodes, breadcrumb:breadcrumb, toc:toc});
+		});
+	});
+}
+var sibling=function(opts,cb,context) {
+
+}
 var API={
 	next:next,
 	prev:prev,
@@ -5002,6 +5107,7 @@ var API={
 	txtid2vpos:txtid2vpos,	
 	toc:toc,
 	fetch:fetch,
+	sibling:sibling,
 	excerpt:excerpt,
 	scan:scan,
 	filter:filter,
@@ -5009,7 +5115,8 @@ var API={
 	fillHits:fillHits,
 	renderHits:renderHits,
 	tryOpen:tryOpen,
-	get:get
+	get:get,
+	breadcrumb:breadcrumb
 }
 module.exports=API;
 },{"ksana-database":"ksana-database","ksana-search":"ksana-search","ksana-search/plist":21}]},{},[]);

@@ -17,7 +17,7 @@ var styles={
 }
 var maincomponent = React.createClass({
   getInitialState:function() {
-    return {items:[],hits:[],itemclick:" ",text:"",q:"",uti:"",localmode:false,ready:false,links:[],
+    return {items:[],itemclick:" ",text:"",q:"",uti:"",localmode:false,ready:false,links:[],
     tofind1:localStorage.getItem("tofind1")||"河$",q:localStorage.getItem("q")||"山東省"};
   }
   ,componentDidMount:function() {
@@ -33,8 +33,13 @@ var maincomponent = React.createClass({
     ksa.filter({db:db,regex:tofind1,q:q},function(err,items){
       localStorage.setItem("tofind1",tofind1);
       localStorage.setItem("q",q);
+      if (items.length&&items[0].hits&&items[0].hits.length) {
+        items.sort(function(i1,i2){return i2.hits.length-i1.hits.length});
+      }
       this.setState({items:items,q:q,tofind1:tofind1},function(){
-        this.fetchText(items[0]);
+
+
+        if (items.length) this.fetchText(items[0].uti);
       }.bind(this));
     }.bind(this));
   }
@@ -53,8 +58,8 @@ var maincomponent = React.createClass({
       this.setState({link:uti,text2:content[0].text});
     }.bind(this));
   }
-  ,onItemClick:function(e) {
-    this.fetchText(e.target.innerHTML);
+  ,onItemClick:function(idx) {
+    this.state.items[idx]&&this.fetchText(this.state.items[idx].uti);
   }
   ,renderText:function() {
     return ksa.renderHits(this.state.text,this.state.hits,E.bind(null,"span"));
@@ -92,7 +97,7 @@ var maincomponent = React.createClass({
     if (!this.state.ready) return this.renderOpenKDB();
     return <div style={styles.container}>    
       <div style={styles.dualfilter}>
-        <DualFilter items={this.state.items} hits={this.state.hits}
+        <DualFilter items={this.state.items}
           inputstyle={styles.input}
           tofind1={this.state.tofind1}
           tofind2={this.state.q}

@@ -27,7 +27,7 @@ var styles={
 }
 var maincomponent = React.createClass({displayName: "maincomponent",
   getInitialState:function() {
-    return {items:[],hits:[],itemclick:" ",text:"",q:"",uti:"",localmode:false,ready:false,links:[],
+    return {items:[],itemclick:" ",text:"",q:"",uti:"",localmode:false,ready:false,links:[],
     tofind1:localStorage.getItem("tofind1")||"河$",q:localStorage.getItem("q")||"山東省"};
   }
   ,componentDidMount:function() {
@@ -43,8 +43,13 @@ var maincomponent = React.createClass({displayName: "maincomponent",
     ksa.filter({db:db,regex:tofind1,q:q},function(err,items){
       localStorage.setItem("tofind1",tofind1);
       localStorage.setItem("q",q);
+      if (items.length&&items[0].hits&&items[0].hits.length) {
+        items.sort(function(i1,i2){return i2.hits.length-i1.hits.length});
+      }
       this.setState({items:items,q:q,tofind1:tofind1},function(){
-        this.fetchText(items[0]);
+
+
+        if (items.length) this.fetchText(items[0].uti);
       }.bind(this));
     }.bind(this));
   }
@@ -63,8 +68,8 @@ var maincomponent = React.createClass({displayName: "maincomponent",
       this.setState({link:uti,text2:content[0].text});
     }.bind(this));
   }
-  ,onItemClick:function(e) {
-    this.fetchText(e.target.innerHTML);
+  ,onItemClick:function(idx) {
+    this.state.items[idx]&&this.fetchText(this.state.items[idx].uti);
   }
   ,renderText:function() {
     return ksa.renderHits(this.state.text,this.state.hits,E.bind(null,"span"));
@@ -102,7 +107,7 @@ var maincomponent = React.createClass({displayName: "maincomponent",
     if (!this.state.ready) return this.renderOpenKDB();
     return React.createElement("div", {style: styles.container}, 
       React.createElement("div", {style: styles.dualfilter}, 
-        React.createElement(DualFilter, {items: this.state.items, hits: this.state.hits, 
+        React.createElement(DualFilter, {items: this.state.items, 
           inputstyle: styles.input, 
           tofind1: this.state.tofind1, 
           tofind2: this.state.q, 
@@ -195,25 +200,33 @@ var DualFilter=React.createClass({
     }
   }
   ,getDefaultProps:function(){
-    return {items:[],hits:[],vpos:[]};
+    return {items:[]};
   }
   ,propTypes:{
     items:PT.array.isRequired
-    ,hits:PT.array
-    ,vpos:PT.array
     ,onFilter:PT.func.isRequired
     ,onItemClick:PT.func.isRequired
     ,inputstyle:PT.object
     ,inputclass:PT.oneOfType([PT.string, PT.func])
 
   }
+  ,renderHit:function(hit) {
+    return E("span",{className:"hl0"},hit);
+  }
+  ,itemClick:function(e) {
+    ele=e.target;
+    if (!(ele.dataset &&ele.dataset.idx)) ele=ele.parentElement;
+    var idx=parseInt(ele.dataset.idx);
+    this.props.onItemClick(idx);
+  }
   ,renderItem:function(i,idx){
-    var hit=(this.props.hits[i]||[]).length||"";
-    var vpos=this.props.vpos[i]||0;
+    var hit=(this.props.items[i].hits||[]).length||"";
+    var vpos=this.props.items[i].vpos||0;
     return E("div",{key:idx,style:styles.item
       ,"data-vpos":vpos
+      ,"data-idx":idx
       ,"data-hit":hit
-      ,onClick:this.props.onItemClick},this.props.items[i]);
+      ,onClick:this.itemClick},this.props.items[i].text,this.renderHit.call(this,hit));
   }
   ,preparesearch:function() {
     clearTimeout(this.timer);
